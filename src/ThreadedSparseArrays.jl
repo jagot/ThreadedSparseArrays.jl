@@ -5,6 +5,14 @@ import LinearAlgebra: mul!
 using SparseArrays
 import SparseArrays: AdjOrTransStridedOrTriangularMatrix, getcolptr
 
+# * ThreadedSparseMatrixCSC
+
+"""
+    ThreadedSparseMatrixCSC(A)
+
+Thin container around `A::SparseMatrixCSC` that will enable certain
+threaded multiplications of `A` with dense matrices.
+"""
 struct ThreadedSparseMatrixCSC{Tv,Ti,At} <: AbstractSparseMatrix{Tv,Ti}
     A::At
     ThreadedSparseMatrixCSC(A::At) where {Tv,Ti,At<:AbstractSparseMatrix{Tv,Ti}} =
@@ -87,6 +95,42 @@ function mul!(C::StridedVecOrMat, X::AdjOrTransStridedOrTriangularMatrix, A::Thr
     C
 end
 
-export ThreadedSparseMatrixCSC
+# * ThreadedColumnizedSparseMatrix
+
+"""
+    ThreadedColumnizedSparseMatrix(columns, m, n)
+
+Sparse matrix of size `m×n` where the `columns` are stored separately,
+enabling threaded multiplication. Seems faster than
+[`ThreadedSparseMatrixCSC`](@ref) for some use cases.
+"""
+struct ThreadedColumnizedSparseMatrix{Tv,Ti,Columns} <: AbstractSparseMatrix{Tv,Ti}
+    columns::Columns
+    m::Int
+    n::Int
+    ThreadedColumnizedSparseMatrix(::Type{Tv}, ::Type{Ti}, columns::Columns, m, n) where {Tv,Ti,Columns} =
+        new{Tv,Ti,Columns}(columns, m, n)
+end
+
+function ThreadedColumnizedSparseMatrix(A::AbstractSparseMatrix{Tv,Ti}) where {Tv,Ti}
+    m,n = size(A)
+    Column = typeof(A[:,1])
+    columns = Column[A[:,j] for j = 1:n]
+    ThreadedColumnizedSparseMatrix(Tv, Ti, columns, m, n)
+end
+
+Base.size(A::ThreadedColumnizedSparseMatrix) = (A.m,A.n)
+Base.size(A::ThreadedColumnizedSparseMatrix,i) = size(A)[i]
+Base.getindex(A::ThreadedColumnizedSparseMatrix, i, j) = A.columns[j][i]
+
+function LinearAlgebra.mul!(A::AbstractMatrix, B::AbstractMatrix, C::ThreadedColumnizedSparseMatrix,
+              α::Number=true, β::Number=false)
+    Threads.@threads for j = 1:C.n
+        LinearAlgebra.mul!(view(A, :, j), B, C.columns[j], α, β)
+    end
+    A
+end
+
+export ThreadedSparseMatrixCSC, ThreadedColumnizedSparseMatrix
 
 end # module

@@ -9,11 +9,13 @@ using Test
     T = ComplexF64
 
     C = sprand(T, N, n, 0.05)
-    Ct = ThreadedSparseMatrixCSC(C)
+    @testset "$(Mat)" for Mat in [ThreadedSparseMatrixCSC, ThreadedColumnizedSparseMatrix]
+        Ct = Mat(C)
 
-    eye = Matrix(one(T)*I, N, N)
-    out = zeros(T, N, n)
-    LinearAlgebra.mul!(out, eye, Ct)
-    ref = eye*C
-    @test norm(ref-out) == 0
+        eye = Matrix(one(T)*I, N, N)
+        out = zeros(T, N, n)
+        LinearAlgebra.mul!(out, eye, Ct)
+        ref = eye*C
+        @test norm(ref-out) == 0
+    end
 end
