@@ -87,11 +87,21 @@ function mul!(C::StridedVecOrMat, X::AdjOrTransStridedOrTriangularMatrix, A::Thr
     if β != 1
         β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
     end
+    # Threads.@threads for col = 1:size(A, 2)
+    #     @inbounds for multivec_row=1:mX, k=getcolptr(A)[col]:(getcolptr(A)[col+1]-1)
+    #         C[multivec_row, col] += α * X[multivec_row, rv[k]] * nzv[k] # perhaps suboptimal position of α?
+    #     end
+    # end
     Threads.@threads for col = 1:size(A, 2)
-        @inbounds for multivec_row=1:mX, k=getcolptr(A)[col]:(getcolptr(A)[col+1]-1)
-            C[multivec_row, col] += α * X[multivec_row, rv[k]] * nzv[k] # perhaps suboptimal position of α?
+        @inbounds for k=getcolptr(A)[col]:(getcolptr(A)[col+1]-1)
+            j = rv[k]
+            αv = nzv[k]*α
+            for multivec_row=1:mX
+                C[multivec_row, col] += X[multivec_row, j] * αv
+            end
         end
     end
+
     C
 end
 
