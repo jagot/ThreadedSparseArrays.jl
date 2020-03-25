@@ -30,6 +30,26 @@ for f in [:rowvals, :nonzeros, :getcolptr]
     @eval SparseArrays.$(f)(A::ThreadedSparseMatrixCSC) = SparseArrays.$(f)(A.A)
 end
 
+function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVector,AdjOrTransStridedOrTriangularMatrix}, α::Number, β::Number)
+    size(A, 2) == size(B, 1) || throw(DimensionMismatch())
+    size(A, 1) == size(C, 1) || throw(DimensionMismatch())
+    size(B, 2) == size(C, 2) || throw(DimensionMismatch())
+    nzv = nonzeros(A)
+    rv = rowvals(A)
+    if β != 1
+        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
+    end
+    Threads.@threads for k = 1:size(C, 2)
+        @inbounds for col = 1:size(A, 2)
+            αxj = B[col,k] * α
+            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                C[rv[j], k] += nzv[j]*αxj
+            end
+        end
+    end
+    C
+end
+
 function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::Union{StridedVector,AdjOrTransStridedOrTriangularMatrix}, α::Number, β::Number)
     A = adjA.parent
     size(A, 2) == size(C, 1) || throw(DimensionMismatch())
@@ -41,15 +61,13 @@ function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}
     if β != 1
         β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
     end
-    for k = 1:size(C, 2)
-        Threads.@threads for col = 1:size(A, 2)
-            @inbounds begin
-                tmp = zero(eltype(C))
-                for j = colptrA[col]:(colptrA[col+1] - 1)
-                    tmp += adjoint(nzv[j])*B[rv[j],k]
-                end
-                C[col,k] += α*tmp
+    Threads.@threads for k = 1:size(C, 2)
+        @inbounds for col = 1:size(A, 2)
+            tmp = zero(eltype(C))
+            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                tmp += adjoint(nzv[j])*B[rv[j],k]
             end
+            C[col,k] += tmp * α
         end
     end
     C
