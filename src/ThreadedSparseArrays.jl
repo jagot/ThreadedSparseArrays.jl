@@ -17,15 +17,10 @@ end
 
 Returns an iterator splitting the range `1:n` into `min(k,n)` parts of (almost) equal size.
 """
-RangeIterator(n::Int,k::Int) = RangeIterator(min(n,k),divrem(n,k)...)
+RangeIterator(n::Int, k::Int) = RangeIterator(min(n,k),divrem(n,k)...)
 Base.length(it::RangeIterator) = it.k
-#Base.iterate(it::RangeIterator, i::Int=1) = i>it.k ? nothing : (((i-1)*it.d+min(i-1,it.r)+1):(i*it.d+min(i,it.r)), i+1)
-function Base.iterate(it::RangeIterator, i::Int=1)
-    i>it.k && return nothing
-    e = i*it.d + min(i,it.r)
-    s = e - it.d + (i>it.r)
-    (s:e,i+1)
-end
+endpos(it::RangeIterator, i::Int) = i*it.d+min(i,it.r)
+Base.iterate(it::RangeIterator, i::Int=1) = i>it.k ? nothing : (endpos(it,i-1)+1:endpos(it,i), i+1)
 
 
 # * ThreadedSparseMatrixCSC
