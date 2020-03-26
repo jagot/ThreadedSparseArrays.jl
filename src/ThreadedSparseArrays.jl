@@ -5,6 +5,29 @@ import LinearAlgebra: mul!
 using SparseArrays
 import SparseArrays: AdjOrTransStridedOrTriangularMatrix, getcolptr
 
+# * Threading utilities
+struct RangeIterator
+    k::Int
+    d::Int
+    r::Int
+end
+
+"""
+    RangeIterator(n::Int,k::Int)
+
+Returns an iterator splitting the range `1:n` into `min(k,n)` parts of (almost) equal size.
+"""
+RangeIterator(n::Int,k::Int) = RangeIterator(min(n,k),divrem(n,k)...)
+Base.length(it::RangeIterator) = it.k
+#Base.iterate(it::RangeIterator, i::Int=1) = i>it.k ? nothing : (((i-1)*it.d+min(i-1,it.r)+1):(i*it.d+min(i,it.r)), i+1)
+function Base.iterate(it::RangeIterator, i::Int=1)
+    i>it.k && return nothing
+    e = i*it.d + min(i,it.r)
+    s = e - it.d + (i>it.r)
+    (s:e,i+1)
+end
+
+
 # * ThreadedSparseMatrixCSC
 
 """
@@ -39,11 +62,13 @@ function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVe
     if β != 1
         β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
     end
-    Threads.@threads for k = 1:size(C, 2)
-        @inbounds for col = 1:size(A, 2)
-            αxj = B[col,k] * α
-            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
-                C[rv[j], k] += nzv[j]*αxj
+    @sync for r in RangeIterator(size(C,2), Threads.nthreads())
+        Threads.@spawn for k in r
+            @inbounds for col = 1:size(A, 2)
+                αxj = B[col,k] * α
+                for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                    C[rv[j], k] += nzv[j]*αxj
+                end
             end
         end
     end
@@ -61,13 +86,15 @@ function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}
     if β != 1
         β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
     end
-    Threads.@threads for k = 1:size(C, 2)
-        @inbounds for col = 1:size(A, 2)
-            tmp = zero(eltype(C))
-            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
-                tmp += adjoint(nzv[j])*B[rv[j],k]
+    @sync for r in RangeIterator(size(C,2), Threads.nthreads())
+        Threads.@spawn for k in r
+            @inbounds for col = 1:size(A, 2)
+                tmp = zero(eltype(C))
+                for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                    tmp += adjoint(nzv[j])*B[rv[j],k]
+                end
+                C[col,k] += tmp * α
             end
-            C[col,k] += tmp * α
         end
     end
     C
@@ -83,13 +110,15 @@ function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrix
     if β != 1
         β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
     end
-    Threads.@threads for k = 1:size(C, 2)
-        @inbounds for col = 1:size(A, 2)
-            tmp = zero(eltype(C))
-            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
-                tmp += transpose(nzv[j])*B[rv[j],k]
+    @sync for r in RangeIterator(size(C,2), Threads.nthreads())
+        Threads.@spawn for k in r
+            @inbounds for col = 1:size(A, 2)
+                tmp = zero(eltype(C))
+                for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                    tmp += transpose(nzv[j])*B[rv[j],k]
+                end
+                C[col,k] += tmp * α
             end
-            C[col,k] += tmp * α
         end
     end
     C
@@ -105,21 +134,17 @@ function mul!(C::StridedVecOrMat, X::AdjOrTransStridedOrTriangularMatrix, A::Thr
     if β != 1
         β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
     end
-    # Threads.@threads for col = 1:size(A, 2)
-    #     @inbounds for multivec_row=1:mX, k=getcolptr(A)[col]:(getcolptr(A)[col+1]-1)
-    #         C[multivec_row, col] += α * X[multivec_row, rv[k]] * nzv[k] # perhaps suboptimal position of α?
-    #     end
-    # end
-    Threads.@threads for col = 1:size(A, 2)
-        @inbounds for k=getcolptr(A)[col]:(getcolptr(A)[col+1]-1)
-            j = rv[k]
-            αv = nzv[k]*α
-            for multivec_row=1:mX
-                C[multivec_row, col] += X[multivec_row, j] * αv
+    @sync for r in RangeIterator(size(A,2), Threads.nthreads())
+        Threads.@spawn for col in r
+            @inbounds for k=getcolptr(A)[col]:(getcolptr(A)[col+1]-1)
+                j = rv[k]
+                αv = nzv[k]*α
+                for multivec_row=1:mX
+                    C[multivec_row, col] += X[multivec_row, j] * αv
+                end
             end
         end
     end
-
     C
 end
 
