@@ -39,4 +39,14 @@ using Test
         @test norm(ref-out) == 0
     end
 
+    x = rand(0:1,N)
+    @testset "$(Mat)_L_$(op)_vec" for op in [adjoint,transpose], Mat in [ThreadedSparseMatrixCSC]
+        Ct = Mat(C)
+
+        out = zeros(T, n)
+        LinearAlgebra.mul!(out, op(Ct), x)
+        ref = op(C)*x
+        @test norm(ref-out) == 0
+    end
+
 end

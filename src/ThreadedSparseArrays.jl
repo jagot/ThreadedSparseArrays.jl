@@ -70,7 +70,7 @@ function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVe
     C
 end
 
-function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::Union{StridedVector,AdjOrTransStridedOrTriangularMatrix}, α::Number, β::Number)
+function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransStridedOrTriangularMatrix, α::Number, β::Number)
     A = adjA.parent
     size(A, 2) == size(C, 1) || throw(DimensionMismatch())
     size(A, 1) == size(B, 1) || throw(DimensionMismatch())
@@ -94,8 +94,31 @@ function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}
     end
     C
 end
+function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::StridedVector, α::Number, β::Number)
+    A = adjA.parent
+    size(A, 2) == size(C, 1) || throw(DimensionMismatch())
+    size(A, 1) == size(B, 1) || throw(DimensionMismatch())
+    size(B, 2) == size(C, 2) || throw(DimensionMismatch())
+    @assert size(B,2)==1
+    colptrA = getcolptr(A)
+    nzv = nonzeros(A)
+    rv = rowvals(A)
+    if β != 1
+        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
+    end
+    @sync for r in RangeIterator(size(A,2), Threads.nthreads())
+        Threads.@spawn @inbounds for col = r
+            tmp = zero(eltype(C))
+            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                tmp += adjoint(nzv[j])*B[rv[j]]
+            end
+            C[col] += tmp * α
+        end
+    end
+    C
+end
 
-function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::Union{StridedVector,AdjOrTransStridedOrTriangularMatrix}, α::Number, β::Number)
+function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransStridedOrTriangularMatrix, α::Number, β::Number)
     A = transA.parent
     size(A, 2) == size(C, 1) || throw(DimensionMismatch())
     size(A, 1) == size(B, 1) || throw(DimensionMismatch())
@@ -114,6 +137,28 @@ function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrix
                 end
                 C[col,k] += tmp * α
             end
+        end
+    end
+    C
+end
+function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::StridedVector, α::Number, β::Number)
+    A = transA.parent
+    size(A, 2) == size(C, 1) || throw(DimensionMismatch())
+    size(A, 1) == size(B, 1) || throw(DimensionMismatch())
+    size(B, 2) == size(C, 2) || throw(DimensionMismatch())
+    @assert size(B,2)==1
+    nzv = nonzeros(A)
+    rv = rowvals(A)
+    if β != 1
+        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
+    end
+    @sync for r in RangeIterator(size(A,2), Threads.nthreads())
+        Threads.@spawn @inbounds for col = r
+            tmp = zero(eltype(C))
+            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                tmp += transpose(nzv[j])*B[rv[j]]
+            end
+            C[col] += tmp * α
         end
     end
     C
