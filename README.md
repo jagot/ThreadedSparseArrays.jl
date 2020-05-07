@@ -45,7 +45,7 @@ B2 = At'X2;
 
 ## Notes
 * If the right hand side `X` is a `Vector`, you need to use `At'X` to
-get threading. `A*X` will not work.
+get threading. `At*X` will not work.
 * You might only get speedups for large matrices. Use `@btime` from
 the [BenchmarkTools.jl](https://github.com/JuliaCI/BenchmarkTools.jl)
 package to check if your use case is improved.
