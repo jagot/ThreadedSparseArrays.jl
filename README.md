@@ -12,7 +12,7 @@ PR](https://github.com/JuliaLang/julia/pull/29525).
 ThreadedSparseArrays.jl is not yet a registered package, but you can
 install it with:
 ```
-] add git@github.com:jagot/ThreadedSparseArrays.jl.git
+] add https://github.com/jagot/ThreadedSparseArrays.jl.git
 ```
 
 Note that you *must* enable threading in Julia for
