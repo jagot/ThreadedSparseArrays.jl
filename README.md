@@ -9,10 +9,9 @@ matrix–dense matrix multiplication. Based on [this
 PR](https://github.com/JuliaLang/julia/pull/29525).
 
 ## Installation
-ThreadedSparseArrays.jl is not yet a registered package, but you can
-install it with:
+Install with:
 ```
-] add https://github.com/jagot/ThreadedSparseArrays.jl.git
+] add ThreadedSparseArrays
 ```
 
 Note that you *must* enable threading in Julia for
