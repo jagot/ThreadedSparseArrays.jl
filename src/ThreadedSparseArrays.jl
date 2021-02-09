@@ -3,7 +3,12 @@ module ThreadedSparseArrays
 using LinearAlgebra
 import LinearAlgebra: mul!
 using SparseArrays
-import SparseArrays: AdjOrTransStridedOrTriangularMatrix, getcolptr
+import SparseArrays: getcolptr
+const AdjOrTransDenseMatrix = if VERSION < v"1.7.0-DEV.499"
+    SparseArrays.AdjOrTransStridedOrTriangularMatrix
+else
+    SparseArrays.AdjOrTransDenseMatrix
+end
 
 # * Threading utilities
 struct RangeIterator
@@ -48,7 +53,7 @@ for f in [:rowvals, :nonzeros, :getcolptr]
     @eval SparseArrays.$(f)(A::ThreadedSparseMatrixCSC) = SparseArrays.$(f)(A.A)
 end
 
-function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVector,AdjOrTransStridedOrTriangularMatrix}, α::Number, β::Number)
+function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVector,AdjOrTransDenseMatrix}, α::Number, β::Number)
     size(A, 2) == size(B, 1) || throw(DimensionMismatch())
     size(A, 1) == size(C, 1) || throw(DimensionMismatch())
     size(B, 2) == size(C, 2) || throw(DimensionMismatch())
@@ -70,7 +75,7 @@ function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVe
     C
 end
 
-function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransStridedOrTriangularMatrix, α::Number, β::Number)
+function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransDenseMatrix, α::Number, β::Number)
     A = adjA.parent
     size(A, 2) == size(C, 1) || throw(DimensionMismatch())
     size(A, 1) == size(B, 1) || throw(DimensionMismatch())
@@ -118,7 +123,7 @@ function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}
     C
 end
 
-function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransStridedOrTriangularMatrix, α::Number, β::Number)
+function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransDenseMatrix, α::Number, β::Number)
     A = transA.parent
     size(A, 2) == size(C, 1) || throw(DimensionMismatch())
     size(A, 1) == size(B, 1) || throw(DimensionMismatch())
@@ -164,7 +169,7 @@ function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrix
     C
 end
 
-function mul!(C::StridedVecOrMat, X::AdjOrTransStridedOrTriangularMatrix, A::ThreadedSparseMatrixCSC, α::Number, β::Number)
+function mul!(C::StridedVecOrMat, X::AdjOrTransDenseMatrix, A::ThreadedSparseMatrixCSC, α::Number, β::Number)
     mX, nX = size(X)
     nX == size(A, 1) || throw(DimensionMismatch())
     mX == size(C, 1) || throw(DimensionMismatch())
