@@ -49,4 +49,51 @@ using Test
         @test norm(ref-out) == 0
     end
 
+
+    # These test below are here to ensure we don't hit ambiguity warnings.
+    # The implementations are not (currently) threaded.
+    sx = sprand(Bool,n,0.05)
+    @testset "$(Mat)_L_sparsevec" for Mat in [ThreadedSparseMatrixCSC]
+        Ct = Mat(C)
+
+        out = similar(sx, T, N)
+        LinearAlgebra.mul!(out, Ct, sx)
+        ref = C*sx
+        @test norm(ref-out) == 0
+        @test typeof(ref)==typeof(out)
+    end
+
+    sx = sprand(Bool,N,0.05)
+    @testset "$(Mat)_L_$(op)_sparsevec" for op in [adjoint,transpose], Mat in [ThreadedSparseMatrixCSC]
+        Ct = Mat(C)
+
+        out = similar(sx, T, n)
+        LinearAlgebra.mul!(out, op(Ct), sx)
+        ref = op(C)*sx
+        @test norm(ref-out) == 0
+        @test typeof(ref)==typeof(out)
+    end
+
+    sx = sparse(rand(1:n,10),1:10,true,n,10)
+    @testset "$(Mat)_L_sparse" for Mat in [ThreadedSparseMatrixCSC]
+        Ct = Mat(C)
+
+        out = similar(sx, T, N, 10)
+        LinearAlgebra.mul!(out, Ct, sx)
+        ref = C*sx
+        @test norm(ref-out) == 0
+        @test typeof(ref)==typeof(out)
+    end
+
+    sx = sparse(rand(1:N,10),1:10,true,N,10)
+    @testset "$(Mat)_L_$(op)_sparse" for op in [adjoint,transpose], Mat in [ThreadedSparseMatrixCSC]
+        Ct = Mat(C)
+
+        out = similar(sx, T, n, 10)
+        LinearAlgebra.mul!(out, op(Ct), sx)
+        ref = op(C)*sx
+        @test norm(ref-out) == 0
+        @test typeof(ref)==typeof(out)
+    end
+
 end
