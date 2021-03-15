@@ -4,7 +4,7 @@ using LinearAlgebra
 import LinearAlgebra: mul!
 using SparseArrays
 import SparseArrays: getcolptr
-const AdjOrTransDenseMatrix = if VERSION < v"1.7.0-DEV.499"
+const AdjOrTransDenseMatrix = if VERSION < v"1.6.0-rc2"
     SparseArrays.AdjOrTransStridedOrTriangularMatrix
 else
     SparseArrays.AdjOrTransDenseMatrix
