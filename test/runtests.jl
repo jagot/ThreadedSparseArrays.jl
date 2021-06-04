@@ -11,6 +11,9 @@ function match_exception(f, ::Type{T}=DimensionMismatch, func=:mul!, path="Threa
         st = stacktrace(catch_backtrace())[1]
         p = splitpath(path)
         p2 = splitpath(string(st.file))
+        # GitHub CI DEBUG
+        @show st.func
+        @show st.file
         return ex isa T && st.func == func && p==p2[max(1,end-length(p)+1):end]
     end
     false
