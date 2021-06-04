@@ -9,7 +9,7 @@ using Test
     T = ComplexF64
 
     C = sprand(T, N, n, 0.05)
-    @testset "$(Mat)_R" for Mat in [ThreadedSparseMatrixCSC, ThreadedColumnizedSparseMatrix]
+    @testset "$(Mat)_R" for Mat in [ThreadedSparseMatrixCSC]
         Ct = Mat(C)
 
         eye = Matrix(one(T)*I, N, N)
@@ -56,8 +56,7 @@ using Test
     @testset "$(Mat)_L_sparsevec" for Mat in [ThreadedSparseMatrixCSC]
         Ct = Mat(C)
 
-        out = similar(sx, T, N)
-        LinearAlgebra.mul!(out, Ct, sx)
+        out = Ct*sx
         ref = C*sx
         @test norm(ref-out) == 0
         @test typeof(ref)==typeof(out)
@@ -67,8 +66,7 @@ using Test
     @testset "$(Mat)_L_$(op)_sparsevec" for op in [adjoint,transpose], Mat in [ThreadedSparseMatrixCSC]
         Ct = Mat(C)
 
-        out = similar(sx, T, n)
-        LinearAlgebra.mul!(out, op(Ct), sx)
+        out = op(Ct)*sx
         ref = op(C)*sx
         @test norm(ref-out) == 0
         @test typeof(ref)==typeof(out)
@@ -78,8 +76,7 @@ using Test
     @testset "$(Mat)_L_sparse" for Mat in [ThreadedSparseMatrixCSC]
         Ct = Mat(C)
 
-        out = similar(sx, T, N, 10)
-        LinearAlgebra.mul!(out, Ct, sx)
+        out = Ct*sx
         ref = C*sx
         @test norm(ref-out) == 0
         @test typeof(ref)==typeof(out)
@@ -89,8 +86,7 @@ using Test
     @testset "$(Mat)_L_$(op)_sparse" for op in [adjoint,transpose], Mat in [ThreadedSparseMatrixCSC]
         Ct = Mat(C)
 
-        out = similar(sx, T, n, 10)
-        LinearAlgebra.mul!(out, op(Ct), sx)
+        out = op(Ct)*sx
         ref = op(C)*sx
         @test norm(ref-out) == 0
         @test typeof(ref)==typeof(out)

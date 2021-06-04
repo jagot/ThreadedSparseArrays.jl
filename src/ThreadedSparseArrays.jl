@@ -1,9 +1,13 @@
 module ThreadedSparseArrays
 
+
+export ThreadedSparseMatrixCSC
+
+
 using LinearAlgebra
 import LinearAlgebra: mul!
 using SparseArrays
-import SparseArrays: getcolptr
+import SparseArrays: getcolptr, AbstractSparseMatrixCSC
 const AdjOrTransDenseMatrix = if VERSION < v"1.6.0-rc2"
     SparseArrays.AdjOrTransStridedOrTriangularMatrix
 else
@@ -36,30 +40,17 @@ Base.iterate(it::RangeIterator, i::Int=1) = i>it.k ? nothing : (endpos(it,i-1)+1
 Thin container around `A::SparseMatrixCSC` that will enable certain
 threaded multiplications of `A` with dense matrices.
 """
-struct ThreadedSparseMatrixCSC{Tv,Ti,At} <: AbstractSparseMatrix{Tv,Ti}
+struct ThreadedSparseMatrixCSC{Tv,Ti,At} <: AbstractSparseMatrixCSC{Tv,Ti}
     A::At
-    ThreadedSparseMatrixCSC(A::At) where {Tv,Ti,At<:AbstractSparseMatrix{Tv,Ti}} =
+    ThreadedSparseMatrixCSC(A::At) where {Tv,Ti,At<:AbstractSparseMatrixCSC{Tv,Ti}} =
         new{Tv,Ti,At}(A)
 end
 
 Base.size(A::ThreadedSparseMatrixCSC, args...) = size(A.A, args...)
-Base.eltype(A::ThreadedSparseMatrixCSC) = eltype(A.A)
-Base.getindex(A::ThreadedSparseMatrixCSC, args...) = getindex(A.A, args...)
-
-# Need to override printing
-# Need to forward findnz, etc
 
 for f in [:rowvals, :nonzeros, :getcolptr]
     @eval SparseArrays.$(f)(A::ThreadedSparseMatrixCSC) = SparseArrays.$(f)(A.A)
 end
-
-# For non-threaded implementations, fallback to sparse methods and not generic matmul.
-mul!(C::AbstractVector, A::ThreadedSparseMatrixCSC, B::AbstractVector, α::Number, β::Number) = mul!(C, A.A, B, α, β)
-mul!(C::AbstractMatrix, A::ThreadedSparseMatrixCSC, B::AbstractMatrix, α::Number, β::Number) = mul!(C, A.A, B, α, β)
-mul!(C::AbstractVector, A::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::AbstractVector, α::Number, β::Number) = mul!(C, adjoint(A.parent.A), B, α, β)
-mul!(C::AbstractMatrix, A::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::AbstractMatrix, α::Number, β::Number) = mul!(C, adjoint(A.parent.A), B, α, β)
-mul!(C::AbstractVector, A::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::AbstractVector, α::Number, β::Number) = mul!(C, transpose(A.parent.A), B, α, β)
-mul!(C::AbstractMatrix, A::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::AbstractMatrix, α::Number, β::Number) = mul!(C, transpose(A.parent.A), B, α, β)
 
 function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVector,AdjOrTransDenseMatrix}, α::Number, β::Number)
     size(A, 2) == size(B, 1) || throw(DimensionMismatch())
@@ -200,43 +191,5 @@ function mul!(C::StridedVecOrMat, X::AdjOrTransDenseMatrix, A::ThreadedSparseMat
     end
     C
 end
-
-# * ThreadedColumnizedSparseMatrix
-
-"""
-    ThreadedColumnizedSparseMatrix(columns, m, n)
-
-Sparse matrix of size `m×n` where the `columns` are stored separately,
-enabling threaded multiplication. Seems faster than
-[`ThreadedSparseMatrixCSC`](@ref) for some use cases.
-"""
-struct ThreadedColumnizedSparseMatrix{Tv,Ti,Columns} <: AbstractSparseMatrix{Tv,Ti}
-    columns::Columns
-    m::Int
-    n::Int
-    ThreadedColumnizedSparseMatrix(::Type{Tv}, ::Type{Ti}, columns::Columns, m, n) where {Tv,Ti,Columns} =
-        new{Tv,Ti,Columns}(columns, m, n)
-end
-
-function ThreadedColumnizedSparseMatrix(A::AbstractSparseMatrix{Tv,Ti}) where {Tv,Ti}
-    m,n = size(A)
-    Column = typeof(A[:,1])
-    columns = Column[A[:,j] for j = 1:n]
-    ThreadedColumnizedSparseMatrix(Tv, Ti, columns, m, n)
-end
-
-Base.size(A::ThreadedColumnizedSparseMatrix) = (A.m,A.n)
-Base.size(A::ThreadedColumnizedSparseMatrix,i) = size(A)[i]
-Base.getindex(A::ThreadedColumnizedSparseMatrix, i, j) = A.columns[j][i]
-
-function LinearAlgebra.mul!(A::AbstractMatrix, B::AbstractMatrix, C::ThreadedColumnizedSparseMatrix,
-              α::Number=true, β::Number=false)
-    Threads.@threads for j = 1:C.n
-        LinearAlgebra.mul!(view(A, :, j), B, C.columns[j], α, β)
-    end
-    A
-end
-
-export ThreadedSparseMatrixCSC, ThreadedColumnizedSparseMatrix
 
 end # module
