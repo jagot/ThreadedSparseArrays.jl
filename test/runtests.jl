@@ -9,7 +9,7 @@ using Test
     T = ComplexF64
 
     C = sprand(T, N, n, 0.05)
-    @testset "$(Mat)_R" for Mat in [ThreadedSparseMatrixCSC, ThreadedColumnizedSparseMatrix]
+    @testset "$(Mat)_R" for Mat in [ThreadedSparseMatrixCSC]
         Ct = Mat(C)
 
         eye = Matrix(one(T)*I, N, N)
