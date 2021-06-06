@@ -5,6 +5,10 @@ using Random
 using StableRNGs
 using Test
 
+@static if VERSION < v"1.6.0"
+    parentmodule(x) = x.linfo.def.module
+end
+
 function match_exception(f, ::Type{T}=DimensionMismatch, func=r"^mul!$", m=ThreadedSparseArrays) where T
     try
         f()
