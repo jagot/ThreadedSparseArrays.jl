@@ -5,18 +5,17 @@ using Random
 using StableRNGs
 using Test
 
-
-function match_exception(f, ::Type{T}=DimensionMismatch, func=:mul!, path="ThreadedSparseArrays.jl") where T
+function match_exception(f, ::Type{T}=DimensionMismatch, func=r"^mul!$", m=ThreadedSparseArrays) where T
     try
         f()
     catch ex
         st = stacktrace(catch_backtrace())[1]
-        p = splitpath(path)
-        p2 = splitpath(string(st.file))
-        return ex isa T && st.func == func && p==p2[max(1,end-length(p)+1):end]
+        return ex isa T && match(func,string(st.func))!==nothing && parentmodule(st) === m
     end
     false
 end
+
+
 
 function rand_dense(rng,::Type{ComplexF64}, N, n)
     M = max(N,n)
@@ -46,6 +45,22 @@ rand_scalar(rng,::Type{T}) where T<:Complex = T(rand(rng,2 .^ (1:5)) + im*rand(r
         @test match_exception(()->B*A')
         @test match_exception(()->B'A')
     end
+
+    # These test below are here to get the right fallback for sparse times sparse.
+    # The implementations are not (currently) threaded.
+    @testset "Fallbacks" begin
+        A = ThreadedSparseMatrixCSC(spzeros(2,3))
+        B = spzeros(4,5)
+        @test match_exception(()->A*B,  DimensionMismatch, r"", SparseArrays)
+        @test match_exception(()->A'B,  DimensionMismatch, r"", SparseArrays)
+        @test match_exception(()->A*B', DimensionMismatch, r"", SparseArrays)
+        @test match_exception(()->A'B', DimensionMismatch, r"", SparseArrays)
+        @test match_exception(()->B*A,  DimensionMismatch, r"", SparseArrays)
+        @test match_exception(()->B'A,  DimensionMismatch, r"", SparseArrays)
+        @test match_exception(()->B*A', DimensionMismatch, r"", SparseArrays)
+        @test match_exception(()->B'A', DimensionMismatch, r"", SparseArrays)
+    end
+
 
     @testset "ReturnType" for op1 in [identity,adjoint,transpose], op2 in [identity,adjoint,transpose]
         rng = StableRNG(1234)
@@ -106,28 +121,6 @@ rand_scalar(rng,::Type{T}) where T<:Complex = T(rand(rng,2 .^ (1:5)) + im*rand(r
                 LinearAlgebra.mul!(ref, op(C), x, αβ...)
                 @test out == ref
             end
-        end
-
-        # These test below are here to ensure we don't hit ambiguity warnings.
-        # The implementations are not (currently) threaded.
-        @testset "L_$(op)_sparsevec" for op in [identity,adjoint,transpose]
-            Ct = op(ThreadedSparseMatrixCSC(C))
-
-            sx = sprand(rng,Bool,size(Ct,2),0.05)
-            out = Ct*sx
-            ref = op(C)*sx
-            @test out == ref
-            @test typeof(ref)==typeof(out)
-        end
-
-        @testset "L_$(op)_sparse" for op in [identity,adjoint,transpose]
-            Ct = op(ThreadedSparseMatrixCSC(C))
-            sx = sparse(rand(rng,1:size(Ct,2),10),1:10,true,size(Ct,2),10)
-
-            out = Ct*sx
-            ref = op(C)*sx
-            @test out == ref
-            @test typeof(ref)==typeof(out)
         end
     end
 end
