@@ -52,6 +52,15 @@ for f in [:rowvals, :nonzeros, :getcolptr]
     @eval SparseArrays.$(f)(A::ThreadedSparseMatrixCSC) = SparseArrays.$(f)(A.A)
 end
 
+
+# sparse * sparse multiplications are not (currently) threaded, but we want to keep the return type
+for (T1,t1) in ((ThreadedSparseMatrixCSC,identity), (Adjoint{<:Any,<:ThreadedSparseMatrixCSC},adjoint), (Transpose{<:Any,<:ThreadedSparseMatrixCSC},transpose))
+    for (T2,t2) in ((ThreadedSparseMatrixCSC,identity), (Adjoint{<:Any,<:ThreadedSparseMatrixCSC},adjoint), (Transpose{<:Any,<:ThreadedSparseMatrixCSC},transpose))
+        @eval Base.:(*)(A::$T1, B::$T2) = ThreadedSparseMatrixCSC($t1($t1(A).A)*$t2($t2(B).A))
+    end
+end
+
+
 function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVector,AdjOrTransDenseMatrix}, α::Number, β::Number)
     size(A, 2) == size(B, 1) || throw(DimensionMismatch())
     size(A, 1) == size(C, 1) || throw(DimensionMismatch())
@@ -63,9 +72,9 @@ function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVe
     end
     @sync for r in RangeIterator(size(C,2), Threads.nthreads())
         Threads.@spawn for k in r
-            @inbounds for col = 1:size(A, 2)
+            @inbounds for col in 1:size(A, 2)
                 αxj = B[col,k] * α
-                for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
+                for j in nzrange(A, col)
                     C[rv[j], k] += nzv[j]*αxj
                 end
             end
@@ -74,98 +83,53 @@ function mul!(C::StridedVecOrMat, A::ThreadedSparseMatrixCSC, B::Union{StridedVe
     C
 end
 
-function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransDenseMatrix, α::Number, β::Number)
-    A = adjA.parent
-    size(A, 2) == size(C, 1) || throw(DimensionMismatch())
-    size(A, 1) == size(B, 1) || throw(DimensionMismatch())
-    size(B, 2) == size(C, 2) || throw(DimensionMismatch())
-    colptrA = getcolptr(A)
-    nzv = nonzeros(A)
-    rv = rowvals(A)
-    if β != 1
-        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
-    end
-    @sync for r in RangeIterator(size(C,2), Threads.nthreads())
-        Threads.@spawn for k in r
-            @inbounds for col = 1:size(A, 2)
-                tmp = zero(eltype(C))
-                for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
-                    tmp += adjoint(nzv[j])*B[rv[j],k]
+for (T, t) in ((Adjoint, adjoint), (Transpose, transpose))
+    @eval function mul!(C::StridedVecOrMat, xA::$T{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransDenseMatrix, α::Number, β::Number)
+        A = xA.parent
+        size(A, 2) == size(C, 1) || throw(DimensionMismatch())
+        size(A, 1) == size(B, 1) || throw(DimensionMismatch())
+        size(B, 2) == size(C, 2) || throw(DimensionMismatch())
+        nzv = nonzeros(A)
+        rv = rowvals(A)
+        if β != 1
+            β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
+        end
+        @sync for r in RangeIterator(size(C,2), Threads.nthreads())
+            Threads.@spawn for k in r
+                @inbounds for col in 1:size(A, 2)
+                    tmp = zero(eltype(C))
+                    for j in nzrange(A, col)
+                        tmp += $t(nzv[j])*B[rv[j],k]
+                    end
+                    C[col,k] += tmp * α
                 end
-                C[col,k] += tmp * α
             end
         end
+        C
     end
-    C
-end
-function mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}, B::StridedVector, α::Number, β::Number)
-    A = adjA.parent
-    size(A, 2) == size(C, 1) || throw(DimensionMismatch())
-    size(A, 1) == size(B, 1) || throw(DimensionMismatch())
-    size(B, 2) == size(C, 2) || throw(DimensionMismatch())
-    @assert size(B,2)==1
-    colptrA = getcolptr(A)
-    nzv = nonzeros(A)
-    rv = rowvals(A)
-    if β != 1
-        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
-    end
-    @sync for r in RangeIterator(size(A,2), Threads.nthreads())
-        Threads.@spawn @inbounds for col = r
-            tmp = zero(eltype(C))
-            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
-                tmp += adjoint(nzv[j])*B[rv[j]]
-            end
-            C[col] += tmp * α
-        end
-    end
-    C
-end
 
-function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::AdjOrTransDenseMatrix, α::Number, β::Number)
-    A = transA.parent
-    size(A, 2) == size(C, 1) || throw(DimensionMismatch())
-    size(A, 1) == size(B, 1) || throw(DimensionMismatch())
-    size(B, 2) == size(C, 2) || throw(DimensionMismatch())
-    nzv = nonzeros(A)
-    rv = rowvals(A)
-    if β != 1
-        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
-    end
-    @sync for r in RangeIterator(size(C,2), Threads.nthreads())
-        Threads.@spawn for k in r
-            @inbounds for col = 1:size(A, 2)
+    @eval function mul!(C::StridedVecOrMat, xA::$T{<:Any,<:ThreadedSparseMatrixCSC}, B::StridedVector, α::Number, β::Number)
+        A = xA.parent
+        size(A, 2) == size(C, 1) || throw(DimensionMismatch())
+        size(A, 1) == size(B, 1) || throw(DimensionMismatch())
+        size(B, 2) == size(C, 2) || throw(DimensionMismatch())
+        @assert size(B,2)==1
+        nzv = nonzeros(A)
+        rv = rowvals(A)
+        if β != 1
+            β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
+        end
+        @sync for r in RangeIterator(size(A,2), Threads.nthreads())
+            Threads.@spawn @inbounds for col in r
                 tmp = zero(eltype(C))
-                for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
-                    tmp += transpose(nzv[j])*B[rv[j],k]
+                for j in nzrange(A, col)
+                    tmp += $t(nzv[j])*B[rv[j]]
                 end
-                C[col,k] += tmp * α
+                C[col] += tmp * α
             end
         end
+        C
     end
-    C
-end
-function mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:ThreadedSparseMatrixCSC}, B::StridedVector, α::Number, β::Number)
-    A = transA.parent
-    size(A, 2) == size(C, 1) || throw(DimensionMismatch())
-    size(A, 1) == size(B, 1) || throw(DimensionMismatch())
-    size(B, 2) == size(C, 2) || throw(DimensionMismatch())
-    @assert size(B,2)==1
-    nzv = nonzeros(A)
-    rv = rowvals(A)
-    if β != 1
-        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
-    end
-    @sync for r in RangeIterator(size(A,2), Threads.nthreads())
-        Threads.@spawn @inbounds for col = r
-            tmp = zero(eltype(C))
-            for j = getcolptr(A)[col]:(getcolptr(A)[col + 1] - 1)
-                tmp += transpose(nzv[j])*B[rv[j]]
-            end
-            C[col] += tmp * α
-        end
-    end
-    C
 end
 
 function mul!(C::StridedVecOrMat, X::AdjOrTransDenseMatrix, A::ThreadedSparseMatrixCSC, α::Number, β::Number)
@@ -178,18 +142,47 @@ function mul!(C::StridedVecOrMat, X::AdjOrTransDenseMatrix, A::ThreadedSparseMat
     if β != 1
         β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
     end
+    # TODO: split in X isa DenseMatrixUnion and X isa Adjoint/Transpose so we can use @simd in the first case (see original code in SparseArrays)
     @sync for r in RangeIterator(size(A,2), Threads.nthreads())
         Threads.@spawn for col in r
-            @inbounds for k=getcolptr(A)[col]:(getcolptr(A)[col+1]-1)
-                j = rv[k]
-                αv = nzv[k]*α
-                for multivec_row=1:mX
-                    C[multivec_row, col] += X[multivec_row, j] * αv
+            @inbounds for k in nzrange(A, col)
+                Aiα = nzv[k] * α
+                rvk = rv[k]
+                for multivec_row in 1:mX
+                    C[multivec_row, col] += X[multivec_row, rvk] * Aiα
                 end
             end
         end
     end
     C
+end
+
+for (T, t) in ((Adjoint, adjoint), (Transpose, transpose))
+    @eval function mul!(C::StridedVecOrMat, X::AdjOrTransDenseMatrix, xA::$T{<:Any,<:ThreadedSparseMatrixCSC}, α::Number, β::Number)
+        A = xA.parent
+        mX, nX = size(X)
+        nX == size(A, 2) || throw(DimensionMismatch())
+        mX == size(C, 1) || throw(DimensionMismatch())
+        size(A, 1) == size(C, 2) || throw(DimensionMismatch())
+        rv = rowvals(A)
+        nzv = nonzeros(A)
+        if β != 1
+            β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
+        end
+
+        # transpose of Threaded * Dense algorithm above
+        @sync for r in RangeIterator(size(C,1), Threads.nthreads())
+            Threads.@spawn for k in r
+                @inbounds for col in 1:size(A, 2)
+                    αxj = X[k,col] * α
+                    for j in nzrange(A, col)
+                        C[k, rv[j]] += $t(nzv[j])*αxj
+                    end
+                end
+            end
+        end
+        C
+    end
 end
 
 end # module
