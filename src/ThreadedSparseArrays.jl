@@ -58,9 +58,11 @@ end
     SparseArrays._checkbuffers(A::ThreadedSparseMatrixCSC) = SparseArrays._checkbuffers(A.A)
 end
 
-Base.copy(A::Adjoint{<:Any,<:ThreadedSparseMatrixCSC}) = ThreadedSparseMatrixCSC(copy(A.parent.A'))
-Base.copy(A::Transpose{<:Any,<:ThreadedSparseMatrixCSC}) = ThreadedSparseMatrixCSC(copy(transpose(A.parent.A)))
-Base.permutedims(A::ThreadedSparseMatrixCSC, (a,b))  = ThreadedSparseMatrixCSC(permutedims(A.A, (a,b)))
+for (T,t) in ((ThreadedSparseMatrixCSC,identity), (Adjoint{<:Any,<:ThreadedSparseMatrixCSC},adjoint), (Transpose{<:Any,<:ThreadedSparseMatrixCSC},transpose))
+    @eval Base.copy(A::$T) = ThreadedSparseMatrixCSC(copy($t($t(A).A)))
+    @eval Base.permutedims(A::$T, (a,b)) = ThreadedSparseMatrixCSC(permutedims($t($t(A).A), (a,b)))
+end
+
 
 
 # sparse * sparse multiplications are not (currently) threaded, but we want to keep the return type

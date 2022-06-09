@@ -66,7 +66,7 @@ rand_scalar(rng,::Type{T}) where T<:Complex = T(rand(rng,2 .^ (1:5)) + im*rand(r
     end
 
 
-    @testset "ReturnType" for op1 in [identity,adjoint,transpose], op2 in [identity,adjoint,transpose]
+    @testset "ReturnType_$(op1)_$(op2)" for op1 in [identity,adjoint,transpose], op2 in [identity,adjoint,transpose]
         rng = StableRNG(1234)
         A = rand_sparse(rng,Complex{Int64},10,10,0.4)
         B = rand_sparse(rng,Complex{Int64},10,10,0.4)
@@ -80,6 +80,17 @@ rand_scalar(rng,::Type{T}) where T<:Complex = T(rand(rng,2 .^ (1:5)) + im*rand(r
         out = op1(A)*op2(ThreadedSparseMatrixCSC(B))
         @test out isa SparseMatrixCSC
         @test out == ref
+    end
+
+    @testset "copy_$op" for op in [identity,adjoint,transpose]
+        rng = StableRNG(1234)
+        A = rand_sparse(rng,Complex{Int64},8,10,0.4)
+        out = copy(op(ThreadedSparseMatrixCSC(A)))
+        @test out isa ThreadedSparseMatrixCSC
+        @test out == op(A)
+        out = permutedims(op(ThreadedSparseMatrixCSC(A)))
+        @test out isa ThreadedSparseMatrixCSC
+        @test out == permutedims(op(A))
     end
 
     N = 1000
