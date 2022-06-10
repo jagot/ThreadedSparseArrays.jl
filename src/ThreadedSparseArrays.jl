@@ -53,6 +53,18 @@ for f in [:rowvals, :nonzeros, :getcolptr]
 end
 
 
+@static if v"1.7.0" <= VERSION < v"1.8.0-"
+    SparseArrays._goodbuffers(A::ThreadedSparseMatrixCSC) = SparseArrays._goodbuffers(A.A)
+    SparseArrays._checkbuffers(A::ThreadedSparseMatrixCSC) = SparseArrays._checkbuffers(A.A)
+end
+
+for (T,t) in ((ThreadedSparseMatrixCSC,identity), (Adjoint{<:Any,<:ThreadedSparseMatrixCSC},adjoint), (Transpose{<:Any,<:ThreadedSparseMatrixCSC},transpose))
+    @eval Base.copy(A::$T) = ThreadedSparseMatrixCSC(copy($t($t(A).A)))
+    @eval Base.permutedims(A::$T, (a,b)) = ThreadedSparseMatrixCSC(permutedims($t($t(A).A), (a,b)))
+end
+
+
+
 # sparse * sparse multiplications are not (currently) threaded, but we want to keep the return type
 for (T1,t1) in ((ThreadedSparseMatrixCSC,identity), (Adjoint{<:Any,<:ThreadedSparseMatrixCSC},adjoint), (Transpose{<:Any,<:ThreadedSparseMatrixCSC},transpose))
     for (T2,t2) in ((ThreadedSparseMatrixCSC,identity), (Adjoint{<:Any,<:ThreadedSparseMatrixCSC},adjoint), (Transpose{<:Any,<:ThreadedSparseMatrixCSC},transpose))

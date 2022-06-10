@@ -1,7 +1,7 @@
 name = "ThreadedSparseArrays"
 uuid = "59d54670-b8ac-4d81-ab7a-bb56233e17ab"
 authors = ["Stefanos Carlström <stefanos.carlstrom@gmail.com>"]
-version = "0.2.1"
+version = "0.2.2"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
