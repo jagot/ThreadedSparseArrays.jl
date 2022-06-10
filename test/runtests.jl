@@ -91,6 +91,10 @@ rand_scalar(rng,::Type{T}) where T<:Complex = T(rand(rng,2 .^ (1:5)) + im*rand(r
         out = permutedims(op(ThreadedSparseMatrixCSC(A)))
         @test out isa ThreadedSparseMatrixCSC
         @test out == permutedims(op(A))
+
+        out = convert(Matrix,op(ThreadedSparseMatrixCSC(A)))
+        @test out isa Matrix
+        @test out == op(A)
     end
 
     N = 1000
