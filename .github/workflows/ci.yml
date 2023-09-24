@@ -27,11 +27,6 @@ jobs:
         arch:
           - x64
         include:
-          - os: ubuntu-latest
-            prefix: xvfb-run
-          - version: '1.8'
-            os: ubuntu-latest
-            arch: x64
           - version: '^1.10.0-0'
             os: ubuntu-latest
             arch: x64
