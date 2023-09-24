@@ -26,16 +26,12 @@ jobs:
           - windows-latest #slow
         arch:
           - x64
-          # - aarch64 #not implemented in Github CI
         include:
           - os: ubuntu-latest
             prefix: xvfb-run
           - version: '1.8'
             os: ubuntu-latest
             arch: x64
-          #- version: '1.8'
-          #  os: windows-latest
-          #  arch: x64
           - version: '^1.10.0-0'
             os: ubuntu-latest
             arch: x64
