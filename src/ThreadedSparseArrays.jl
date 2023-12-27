@@ -7,11 +7,11 @@ export ThreadedSparseMatrixCSC
 using LinearAlgebra
 import LinearAlgebra: mul!
 using SparseArrays
-import SparseArrays: getcolptr, AbstractSparseMatrixCSC
+import SparseArrays: getcolptr, AbstractSparseMatrixCSC, DenseMatrixUnion
 const AdjOrTransDenseMatrix = if VERSION < v"1.6.0-rc2"
     SparseArrays.AdjOrTransStridedOrTriangularMatrix
 else
-    SparseArrays.AdjOrTransDenseMatrix
+    Union{DenseMatrixUnion,Adjoint{<:Any,<:DenseMatrixUnion},Transpose{<:Any,<:DenseMatrixUnion}}
 end
 
 # * Threading utilities
